@@ -17,6 +17,18 @@
 			"TargetAllowList": [
 				"Editor"
 			]
+		},
+		{
+			"Name": "GameplayAbilities",
+			"Enabled": true
+		},
+		{
+			"Name": "AbilitySystem",
+			"Enabled": true
+		},
+		{
+			"Name": "Asserts",
+			"Enabled": true
 		}
 	]
 }
