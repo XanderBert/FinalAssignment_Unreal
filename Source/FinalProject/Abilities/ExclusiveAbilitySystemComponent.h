@@ -24,7 +24,7 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Abilities")
 	TSoftClassPtr<UAbilityDescription> GetOwnedAbility() const { return OwnedAbility; }
 
-	// Fires when the owned ability changed, e.g. to show the current ability on the HUD
+	// Fires when the owned ability changed.
 	UPROPERTY(BlueprintAssignable, Category = "Abilities")
 	FOnOwnedAbilityChangedSignature OnOwnedAbilityChanged;
 

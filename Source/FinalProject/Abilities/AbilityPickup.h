@@ -34,7 +34,7 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Ability", meta = (AllowAbstract = false))
 	TSoftClassPtr<UAbilityDescription> AbilityDescription{};
 
-	// Every ability has its own color, Levitation is orange and Time slowdown is blue
+	// Every ability has its own color
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Ability")
 	FLinearColor SphereColor = FLinearColor::White;
 };

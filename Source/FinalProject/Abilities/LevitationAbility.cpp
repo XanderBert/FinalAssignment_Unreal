@@ -30,7 +30,6 @@ void ULevitationAbility::StopEffect()
 	Phase = ELevitationPhase::None;
 
 	//Let gravity take over again, the movement component switches back to walking once the player lands.
-	//When the ability got cancelled mid air (e.g. by picking up another ability) the player simply falls down.
 	UCharacterMovementComponent* Movement = GetCharacterMovement();
 	if (Movement && Movement->MovementMode == MOVE_Flying)
 	{
@@ -50,7 +49,7 @@ bool ULevitationAbility::CanTick_Implementation() const
 
 void ULevitationAbility::TickLogic_Implementation(float deltaTime)
 {
-	//Moving the player can trigger overlaps that end this ability (e.g. picking up another ability),
+	//Moving the player can trigger overlaps that end this ability
 	//so check the phase is still the same after moving
 	switch (Phase)
 	{
