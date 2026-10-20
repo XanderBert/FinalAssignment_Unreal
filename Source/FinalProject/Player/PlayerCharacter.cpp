@@ -135,6 +135,7 @@ void APlayerCharacter::Move(const FInputActionValue& value)
 {
 	if (!Controller)
 	{
+		UE_LOG(LogFinalProject, Error, TEXT("%s No Controller!."), *GetName());
 		return;
 	}
 
