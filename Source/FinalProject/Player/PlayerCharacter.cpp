@@ -29,8 +29,6 @@ APlayerCharacter::APlayerCharacter()
 	UCharacterMovementComponent* Movement = GetCharacterMovement();
 	//The player only turns through the turn input, stepping backward shouldn't make the player face backward
 	Movement->bOrientRotationToMovement = false;
-	Movement->JumpZVelocity = 500.f;
-	Movement->AirControl = 0.35f;
 	Movement->MaxWalkSpeed = 500.f;
 	Movement->MinAnalogWalkSpeed = 20.f;
 	Movement->BrakingDecelerationWalking = 2000.f;
@@ -153,8 +151,6 @@ void APlayerCharacter::SetupPlayerInputComponent(UInputComponent* playerInputCom
 
 	EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Triggered, this, &APlayerCharacter::OnMoveInput);
 	EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Completed, this, &APlayerCharacter::OnMoveInputCompleted);
-	EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Started, this, &ACharacter::Jump);
-	EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Completed, this, &ACharacter::StopJumping);
 
 	//Binds the input actions of the ability descriptions, also the ones granted later on
 	AbilitySystemComponent->BindAbilityInput(EnhancedInputComponent);

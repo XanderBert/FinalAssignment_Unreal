@@ -81,9 +81,6 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Input")
 	TObjectPtr<UInputAction> MoveAction;
 
-	UPROPERTY(EditDefaultsOnly, Category = "Input")
-	TObjectPtr<UInputAction> JumpAction;
-
 private:
 	//Steps in the direction the player is facing, a negative direction steps backward
 	void StartStep(float direction);
