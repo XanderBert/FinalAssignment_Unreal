@@ -12,12 +12,14 @@
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/SpringArmComponent.h"
 #include "InputActionValue.h"
+#include "Materials/MaterialInstanceDynamic.h"
 #include "UObject/ConstructorHelpers.h"
 #include "FinalProject.h"
 
 APlayerCharacter::APlayerCharacter()
 {
-	GetCapsuleComponent()->InitCapsuleSize(42.f, 96.f);
+	PrimaryActorTick.bCanEverTick = true;
+	GetCapsuleComponent()->InitCapsuleSize(50.f, 50.f);
 
 	//Don't rotate when the controller rotates, that only affects the camera
 	bUseControllerRotationPitch = false;
@@ -25,8 +27,8 @@ APlayerCharacter::APlayerCharacter()
 	bUseControllerRotationRoll = false;
 
 	UCharacterMovementComponent* Movement = GetCharacterMovement();
-	Movement->bOrientRotationToMovement = true;
-	Movement->RotationRate = FRotator(0.f, 500.f, 0.f);
+	//The player only turns through the turn input, stepping backward shouldn't make the player face backward
+	Movement->bOrientRotationToMovement = false;
 	Movement->JumpZVelocity = 500.f;
 	Movement->AirControl = 0.35f;
 	Movement->MaxWalkSpeed = 500.f;
@@ -40,26 +42,52 @@ APlayerCharacter::APlayerCharacter()
 
 	CameraBoom = CreateDefaultSubobject<USpringArmComponent>(TEXT("CameraBoom"));
 	CameraBoom->SetupAttachment(RootComponent);
-	CameraBoom->TargetArmLength = 400.f;
-	CameraBoom->bUsePawnControlRotation = true;
+	CameraBoom->TargetArmLength = 250.f;
+	//Follow the rotation of the player instead of the controller, so the camera turns along and looks down on the player a bit
+	CameraBoom->bUsePawnControlRotation = false;
+	CameraBoom->SetRelativeRotation(FRotator(-25.f, 0.f, 0.f));
 
 	FollowCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("FollowCamera"));
 	FollowCamera->SetupAttachment(CameraBoom, USpringArmComponent::SocketName);
 	FollowCamera->bUsePawnControlRotation = false;
 
-	PlaceholderBody = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("PlaceholderBody"));
-	PlaceholderBody->SetupAttachment(RootComponent);
-	PlaceholderBody->SetCollisionProfileName(UCollisionProfile::NoCollision_ProfileName);
-	//The engine cylinder is 100 units in every direction, scale it to the size of the capsule
-	PlaceholderBody->SetRelativeScale3D(FVector(0.84f, 0.84f, 1.92f));
+	Body = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Body"));
+	Body->SetupAttachment(RootComponent);
+	Body->SetCollisionProfileName(UCollisionProfile::NoCollision_ProfileName);
 
-	static ConstructorHelpers::FObjectFinder<UStaticMesh> CylinderMesh(TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
-	if (CylinderMesh.Succeeded())
+	//The engine sphere has a radius of 50, the same as the capsule
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> SphereMesh(TEXT("/Engine/BasicShapes/Sphere.Sphere"));
+	if (SphereMesh.Succeeded())
 	{
-		PlaceholderBody->SetStaticMesh(CylinderMesh.Object);
+		Body->SetStaticMesh(SphereMesh.Object);
+	}
+
+	//This material has a "Color" parameter we use to make the sphere white
+	static ConstructorHelpers::FObjectFinder<UMaterialInterface> ShapeMaterial(TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial"));
+	if (ShapeMaterial.Succeeded())
+	{
+		Body->SetMaterial(0, ShapeMaterial.Object);
 	}
 
 	AbilitySystemComponent = CreateDefaultSubobject<UExclusiveAbilitySystemComponent>(TEXT("AbilitySystemComponent"));
+}
+
+void APlayerCharacter::OnConstruction(const FTransform& transform)
+{
+	Super::OnConstruction(transform);
+
+	if (UMaterialInstanceDynamic* Material = Body->CreateAndSetMaterialInstanceDynamic(0))
+	{
+		Material->SetVectorParameterValue(TEXT("Color"), BodyColor);
+	}
+}
+
+void APlayerCharacter::Tick(float deltaTime)
+{
+	Super::Tick(deltaTime);
+
+	TickTurn(deltaTime);
+	TickStep(deltaTime);
 }
 
 UAbilitySystemComponent* APlayerCharacter::GetAbilitySystemComponent() const
@@ -71,6 +99,7 @@ void APlayerCharacter::Respawn(const FTransform& respawnTransform)
 {
 	//Cancelling reverts the effect of the active ability, like the levitation or the time slowdown
 	AbilitySystemComponent->CancelAllAbilities();
+	StopStepAndTurn();
 
 	GetCharacterMovement()->StopMovementImmediately();
 	TeleportTo(respawnTransform.GetLocation(), respawnTransform.Rotator());
@@ -122,8 +151,8 @@ void APlayerCharacter::SetupPlayerInputComponent(UInputComponent* playerInputCom
 		return;
 	}
 
-	EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Triggered, this, &APlayerCharacter::Move);
-	EnhancedInputComponent->BindAction(LookAction, ETriggerEvent::Triggered, this, &APlayerCharacter::Look);
+	EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Triggered, this, &APlayerCharacter::OnMoveInput);
+	EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Completed, this, &APlayerCharacter::OnMoveInputCompleted);
 	EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Started, this, &ACharacter::Jump);
 	EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Completed, this, &ACharacter::StopJumping);
 
@@ -131,29 +160,88 @@ void APlayerCharacter::SetupPlayerInputComponent(UInputComponent* playerInputCom
 	AbilitySystemComponent->BindAbilityInput(EnhancedInputComponent);
 }
 
-void APlayerCharacter::Move(const FInputActionValue& value)
+void APlayerCharacter::OnMoveInput(const FInputActionValue& value)
 {
-	if (!Controller)
+	const FVector2D MoveInput = value.Get<FVector2D>();
+
+	//Triggered fires every frame while a key is held, only react to the axes that just got pressed
+	const bool bStepPressed = !FMath::IsNearlyZero(MoveInput.Y) && FMath::IsNearlyZero(PreviousMoveInput.Y);
+	const bool bTurnPressed = !FMath::IsNearlyZero(MoveInput.X) && FMath::IsNearlyZero(PreviousMoveInput.X);
+	PreviousMoveInput = MoveInput;
+
+	//Finish the current step or turn first, so the player always ends up on the same grid
+	if (IsStepping() || IsTurning())
 	{
-		UE_LOG(LogFinalProject, Error, TEXT("%s No Controller!."), *GetName());
 		return;
 	}
 
-	const FVector2D MovementVector = value.Get<FVector2D>();
-
-	//Move relative to where the camera is looking, ignoring the pitch
-	const FRotator YawRotation(0.f, Controller->GetControlRotation().Yaw, 0.f);
-	const FVector ForwardDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::X);
-	const FVector RightDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::Y);
-
-	AddMovementInput(ForwardDirection, MovementVector.Y);
-	AddMovementInput(RightDirection, MovementVector.X);
+	if (bStepPressed)
+	{
+		StartStep(FMath::Sign(MoveInput.Y));
+	}
+	else if (bTurnPressed)
+	{
+		StartTurn(90.f * FMath::Sign(MoveInput.X));
+	}
 }
 
-void APlayerCharacter::Look(const FInputActionValue& value)
+void APlayerCharacter::OnMoveInputCompleted(const FInputActionValue& value)
 {
-	const FVector2D LookAxisVector = value.Get<FVector2D>();
+	PreviousMoveInput = FVector2D::ZeroVector;
+}
 
-	AddControllerYawInput(LookAxisVector.X);
-	AddControllerPitchInput(LookAxisVector.Y);
+void APlayerCharacter::StartStep(float direction)
+{
+	StepDirection = GetActorForwardVector().GetSafeNormal2D() * direction;
+	RemainingStepDistance = StepDistance;
+}
+
+void APlayerCharacter::StartTurn(float angle)
+{
+	TargetYaw = GetActorRotation().Yaw + angle;
+	RemainingTurnAngle = angle;
+}
+
+void APlayerCharacter::StopStepAndTurn()
+{
+	RemainingStepDistance = 0.f;
+	RemainingTurnAngle = 0.f;
+}
+
+void APlayerCharacter::TickStep(float deltaTime)
+{
+	if (!IsStepping())
+	{
+		return;
+	}
+
+	UCharacterMovementComponent* Movement = GetCharacterMovement();
+	const float Distance = FMath::Min(StepSpeed * deltaTime, RemainingStepDistance);
+	RemainingStepDistance -= Distance;
+
+	//Only move horizontally, the movement component keeps handling gravity and the levitation keeps handling the height.
+	//Sweep so walls and the Step block the player, the step ends early when something is in the way.
+	FHitResult Hit;
+	Movement->SafeMoveUpdatedComponent(StepDirection * Distance, GetActorQuat(), true, Hit);
+	if (Hit.bBlockingHit)
+	{
+		RemainingStepDistance = 0.f;
+	}
+}
+
+void APlayerCharacter::TickTurn(float deltaTime)
+{
+	if (!IsTurning())
+	{
+		return;
+	}
+
+	const float MaxAngle = TurnSpeed * deltaTime;
+	const float Angle = FMath::Clamp(RemainingTurnAngle, -MaxAngle, MaxAngle);
+	RemainingTurnAngle -= Angle;
+
+	//Snap to the target once done, so turning many times doesn't build up rounding errors
+	FRotator NewRotation = GetActorRotation();
+	NewRotation.Yaw = IsTurning() ? NewRotation.Yaw + Angle : TargetYaw;
+	SetActorRotation(NewRotation);
 }

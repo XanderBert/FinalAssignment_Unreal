@@ -1,9 +1,10 @@
 #include "Obstacles/Crusher.h"
-#include "Components/ArrowComponent.h"
 #include "Components/BoxComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/CollisionProfile.h"
 #include "Engine/StaticMesh.h"
+#include "Engine/World.h"
+#include "GameFramework/GameModeBase.h"
 #include "Player/PlayerCharacter.h"
 #include "UObject/ConstructorHelpers.h"
 
@@ -39,10 +40,6 @@ ACrusher::ACrusher()
 	CrushZone = CreateDefaultSubobject<UBoxComponent>(TEXT("CrushZone"));
 	CrushZone->SetupAttachment(Head);
 	CrushZone->SetCollisionProfileName(TEXT("OverlapOnlyPawn"));
-
-	RespawnPoint = CreateDefaultSubobject<UArrowComponent>(TEXT("RespawnPoint"));
-	RespawnPoint->SetupAttachment(SceneRoot);
-	RespawnPoint->SetRelativeLocation(FVector(-HeadSize.X * 0.5f - 150.f, 0.f, 100.f));
 }
 
 void ACrusher::OnConstruction(const FTransform& transform)
@@ -148,8 +145,16 @@ void ACrusher::CrushOverlappingActors()
 
 void ACrusher::Crush(AActor* actor)
 {
-	if (APlayerCharacter* Player = Cast<APlayerCharacter>(actor))
+	APlayerCharacter* Player = Cast<APlayerCharacter>(actor);
+	AGameModeBase* GameMode = GetWorld()->GetAuthGameMode();
+	if (!Player || !GameMode)
 	{
-		Player->Respawn(RespawnPoint->GetComponentTransform());
+		return;
+	}
+
+	//The same player start the player spawned at when the level started
+	if (AActor* PlayerStart = GameMode->FindPlayerStart(Player->GetController()))
+	{
+		Player->Respawn(PlayerStart->GetActorTransform());
 	}
 }

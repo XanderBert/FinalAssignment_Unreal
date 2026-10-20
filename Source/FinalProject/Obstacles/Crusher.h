@@ -4,12 +4,11 @@
 #include "GameFramework/Actor.h"
 #include "Crusher.generated.h"
 
-class UArrowComponent;
 class UBoxComponent;
 class UPrimitiveComponent;
 class UStaticMeshComponent;
 
-// Obstacle that keeps slamming down and rising up again. A player under it while it drops gets crushed and respawns at the RespawnPoint.
+// Obstacle that keeps slamming down and rising up again. A player under it while it drops gets crushed and respawns at the player start.
 // At normal speed it's open too short to pass under, and it's too high to levitate over.
 // It moves on the world time, so the Time slowdown ability slows it down enough to pass under it.
 UCLASS()
@@ -39,10 +38,6 @@ protected:
 	// Thin zone at the bottom of the head, everything in it gets crushed while dropping
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	TObjectPtr<UBoxComponent> CrushZone;
-
-	// Where a crushed player respawns, move it in front of the crusher
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
-	TObjectPtr<UArrowComponent> RespawnPoint;
 
 	// Size of the head. Make it taller than the levitation height, so the player can't levitate over it
 	UPROPERTY(EditAnywhere, Category = "Crusher", meta = (ForceUnits = "cm"))
